@@ -2,7 +2,7 @@
 {
     internal class deviceInfo
     {
-        public string RequestInfo { get;set; }
-        public string ResponseInfo { get;set; }
+        public string? RequestInfo { get;set; }
+        public string? ResponseInfo { get;set; }
     }
 }

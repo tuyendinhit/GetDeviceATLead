@@ -10,12 +10,11 @@ namespace GetDeviceATLead
 {
     internal class Program
     {
-        private static string statusServer = "";
-        private static string[] requestingDevices;
-        private static string requestInfo;
+        private static string[]? requestingDevices;
+        private static string? requestInfo;
         private static string? responseInfo;
         private static Dictionary<string, List<deviceInfo>> remainDeviceInfo = new();
-        private static string currentRequestInfo;
+        private static string? currentRequestInfo;
 
         static string svApi = "sv1";
         static string serverApi = "http://api.zchanger.pro";
@@ -39,7 +38,7 @@ namespace GetDeviceATLead
                 serverApi = $"http://{fauser}-device.atlead.net";
             }
 
-            while (true || IsControllerWindowOpen())
+            while (IsControllerWindowOpen())
             {
                 Thread.Sleep(500);
                 requestingDevices = Directory.GetFiles($"{AppDomain.CurrentDomain.BaseDirectory}RequestDevice", "*_request.txt", SearchOption.AllDirectories);
@@ -91,7 +90,7 @@ namespace GetDeviceATLead
 
         private static string? GetDeviceInfoOffline()
         {
-            if (remainDeviceInfo.Count == 0 || !remainDeviceInfo.ContainsKey(currentRequestInfo))
+            if (remainDeviceInfo.Count == 0 || !remainDeviceInfo.ContainsKey(currentRequestInfo??""))
             {
                 return null;
             }
@@ -118,17 +117,17 @@ namespace GetDeviceATLead
             {
                 tryCount++;
                 ConLog($"Getting devices...{tryCount}");
-                string requestUri = $"{serverApi}/v6.php?user={fauser}&ip={GetIP()}&numDevice=20";
+                string? requestUri = $"{serverApi}/v6.php?user={fauser}&ip={GetIP()}&numDevice=20";
                 requestUri = requestUri.Replace("//v6", "/v6");
-                string requestData = currentRequestInfo;
+                string? requestData = currentRequestInfo;
 
-                var content = new StringContent(requestData, Encoding.ASCII, "application/x-www-form-urlencoded");
-
-                using HttpClient client = new();
-                string resp = string.Empty;
+                var content = new StringContent(requestData ?? "", Encoding.ASCII, "application/x-www-form-urlencoded");
+                string? resp = string.Empty;
                 JObject? info = null;
                 try
                 {
+
+                    using HttpClient client = new();
                     resp = client.PostAsync(requestUri, content).Result.Content.ReadAsStringAsync().Result;
                     info = JObject.Parse(resp);
                 }
@@ -145,12 +144,12 @@ namespace GetDeviceATLead
                         {
                             if (info.TryGetValue("devices", out JToken? devices))
                             {
-                                remainDeviceInfo[currentRequestInfo] = new List<deviceInfo>();
+                                remainDeviceInfo[currentRequestInfo ?? ""] = new List<deviceInfo>();
                                 foreach (var device in devices)
                                 {
-                                    remainDeviceInfo[currentRequestInfo].Add(new deviceInfo
+                                    remainDeviceInfo[currentRequestInfo??""].Add(new deviceInfo
                                     {
-                                        RequestInfo = currentRequestInfo,
+                                        RequestInfo = currentRequestInfo ?? "",
                                         ResponseInfo = "{\"success\":true,\"error\":\"\",\"device\":\"" + device + "\",\"nonce\":\"" + info["nonce"] + "\"}"
                                     });
                                 }
@@ -176,6 +175,7 @@ namespace GetDeviceATLead
             {
                 //string ipAddress = client.GetStringAsync("https://api.ipify.org").Result;
                 string ipAddress = client.GetStringAsync("https://myipv4.p1.opendns.com/get_my_ip").Result;
+                ipAddress = Regex.Match(ipAddress, @"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})").Groups[1].Value;
                 return ipAddress;
             }
             catch (HttpRequestException)
