@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace GetDeviceATLead
 {
@@ -46,15 +47,18 @@ namespace GetDeviceATLead
 
                 foreach (string device in requestingDevices)
                 {
-                    Console.WriteLine("Serial: " + Path.GetFileName(device).Replace("_request.txt", ""));
+                    ConLog("Serial: " + Path.GetFileName(device).Replace("_request.txt", ""));
                     requestInfo = File.ReadAllText(device);
-                    currentRequestInfo = requestInfo;
-                    responseInfo = GetDeviceInfoOffline();
-                    if (string.IsNullOrEmpty(responseInfo))
+                    currentRequestInfo = Clean(requestInfo);
+                    do
                     {
-                        GetDeviceInfoOnline();
-                        continue;
-                    }
+                        responseInfo = GetDeviceInfoOffline();
+                        if (string.IsNullOrEmpty(responseInfo))
+                        {
+                            GetDeviceInfoOnline();
+                            Task.Delay(3000).Wait();
+                        }
+                    } while (string.IsNullOrEmpty(responseInfo));
 
                     string fileResponse_ = device.Replace("_request", "_response_");
                     File.Move(device, fileResponse_, true);
@@ -62,6 +66,22 @@ namespace GetDeviceATLead
                     File.Move(fileResponse_, fileResponse_.Replace("_response_", "_response"), true);
                 }
             }
+        }
+
+        private static void ConLog(string v)
+        {
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}]{v}");
+        }
+
+        private static string Clean(string requestInfo)
+        {
+            requestInfo = Regex.Replace(requestInfo, "&hwid=[^&]+", "&hwid=e927f2734571872d");
+            requestInfo = Regex.Replace(requestInfo, "&Latitude=[^&]+", "&Latitude=21.0313");
+            requestInfo = Regex.Replace(requestInfo, "&Longitude=[^&]+", "&Longitude=105.8516");
+            requestInfo = Regex.Replace(requestInfo, "&timeZone=[^&]+", "timeZone=QXNpYS9CYW5na29r");
+            //requestInfo = Regex.IsMatch(requestInfo, "connection=mobile") ? requestInfo : Regex.Replace(requestInfo, "&isp=[^&]+", "isp=\"Viettel Telecom\"");
+
+            return requestInfo;
         }
 
         private static bool IsControllerWindowOpen()
@@ -78,14 +98,14 @@ namespace GetDeviceATLead
 
             string? result = null;
             KeyValuePair<string, List<deviceInfo>> item = remainDeviceInfo.FirstOrDefault(x => x.Key == currentRequestInfo);
-            Console.WriteLine("#1Remain device: " + item.Value.Count);
+            ConLog("#1Remain device: " + item.Value.Count);
 
             if (item.Value.Count > 0)
             {
                 result = item.Value.First().ResponseInfo;
                 item.Value.RemoveAt(0);
             }
-            Console.WriteLine("#2Remain device: " + item.Value.Count);
+            ConLog("#2Remain device: " + item.Value.Count);
 
             return result;
         }
@@ -93,10 +113,11 @@ namespace GetDeviceATLead
         private static void GetDeviceInfoOnline()
         {
             int tryCount = 0;
+            DateTime sTime = DateTime.Now;
             while (true)
             {
                 tryCount++;
-                Console.WriteLine($"Getting devices...{tryCount}");
+                ConLog($"Getting devices...{tryCount}");
                 string requestUri = $"{serverApi}/v6.php?user={fauser}&ip={GetIP()}&numDevice=20";
                 requestUri = requestUri.Replace("//v6", "/v6");
                 string requestData = currentRequestInfo;
@@ -104,8 +125,8 @@ namespace GetDeviceATLead
                 var content = new StringContent(requestData, Encoding.ASCII, "application/x-www-form-urlencoded");
 
                 using HttpClient client = new();
-                string resp;
-                JObject? info;
+                string resp = string.Empty;
+                JObject? info = null;
                 try
                 {
                     resp = client.PostAsync(requestUri, content).Result.Content.ReadAsStringAsync().Result;
@@ -113,8 +134,7 @@ namespace GetDeviceATLead
                 }
                 catch (Exception ex)
                 { 
-                    Console.WriteLine("Error get device: " + ex.Message);
-                    info = new JObject();
+                    ConLog("Error get device: " + ex.Message);
                 }
                 
                 if (info != null)
@@ -134,11 +154,16 @@ namespace GetDeviceATLead
                                         ResponseInfo = "{\"success\":true,\"error\":\"\",\"device\":\"" + device + "\",\"nonce\":\"" + info["nonce"] + "\"}"
                                     });
                                 }
+                                ConLog($"Get device success ({(DateTime.Now - sTime).TotalSeconds}s)");
                                 return;
                             }
                         }
                     }
+                    ConLog($"Get device fail: {info} || ({(DateTime.Now - sTime).TotalSeconds}s)");
                 }
+
+                ConLog($"Get device fail: {resp} || ({(DateTime.Now - sTime).TotalSeconds}s)");
+
                 
                 Thread.Sleep(3000);
             }
@@ -149,7 +174,8 @@ namespace GetDeviceATLead
             using HttpClient client = new HttpClient();
             try
             {
-                string ipAddress = client.GetStringAsync("https://api.ipify.org").Result;
+                //string ipAddress = client.GetStringAsync("https://api.ipify.org").Result;
+                string ipAddress = client.GetStringAsync("https://myipv4.p1.opendns.com/get_my_ip").Result;
                 return ipAddress;
             }
             catch (HttpRequestException)
